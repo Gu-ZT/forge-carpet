@@ -30,7 +30,7 @@ public abstract class PlayerList_fakePlayersMixin
     @Final
     private MinecraftServer server;
 
-    @Inject(method = "readPlayerDataFromFile", at = @At(value = "RETURN", shift = At.Shift.BEFORE))
+    @Inject(method = "load", at = @At(value = "RETURN", shift = At.Shift.BEFORE))
     private void fixStartingPos(ServerPlayerEntity serverPlayerEntity_1, CallbackInfoReturnable<CompoundNBT> cir)
     {
         if (serverPlayerEntity_1 instanceof EntityPlayerMPFake)
@@ -39,7 +39,7 @@ public abstract class PlayerList_fakePlayersMixin
         }
     }
 
-    @Redirect(method = "initializeConnectionToPlayer", at = @At(value = "NEW", target = "net/minecraft/network/play/ServerPlayNetHandler"))
+    @Redirect(method = "placeNewPlayer", at = @At(value = "NEW", target = "net/minecraft/network/play/ServerPlayNetHandler"))
     private ServerPlayNetHandler replaceNetworkHandler(MinecraftServer server, NetworkManager networkManager, ServerPlayerEntity playerIn)
     {
         boolean isServerPlayerEntity = playerIn instanceof EntityPlayerMPFake;
@@ -53,13 +53,13 @@ public abstract class PlayerList_fakePlayersMixin
         }
     }
 
-    @Redirect(method = "createPlayerForUser", at = @At(value = "INVOKE", target = "Ljava/util/Iterator;hasNext()Z"))
+    @Redirect(method = "getPlayerForLogin", at = @At(value = "INVOKE", target = "Ljava/util/Iterator;hasNext()Z"))
     private boolean cancelWhileLoop(Iterator iterator)
     {
         return false;
     }
 
-    @Inject(method = "createPlayerForUser", at = @At(value = "INVOKE", shift = At.Shift.BEFORE,
+    @Inject(method = "getPlayerForLogin", at = @At(value = "INVOKE", shift = At.Shift.BEFORE,
             target = "Ljava/util/Iterator;hasNext()Z"), locals = LocalCapture.CAPTURE_FAILHARD)
     private void newWhileLoop(GameProfile gameProfile_1, CallbackInfoReturnable<ServerPlayerEntity> cir, UUID uUID_1,
                               List list_1, ServerPlayerEntity serverPlayerEntity, Iterator var5)

@@ -42,6 +42,7 @@ import net.minecraft.world.World;
 import net.minecraft.world.server.ServerWorld;
 import net.minecraftforge.fml.network.FMLMCRegisterPacketHandler;
 
+import javax.annotation.Nonnull;
 import java.net.SocketAddress;
 
 public class EntityPlayerMPFake extends ServerPlayerEntity
@@ -52,26 +53,26 @@ public class EntityPlayerMPFake extends ServerPlayerEntity
     public static EntityPlayerMPFake createFake(String username, MinecraftServer server, double d0, double d1, double d2, double yaw, double pitch, RegistryKey<World> dimensionId, GameType gamemode, boolean flying)
     {
         //prolly half of that crap is not necessary, but it works
-        ServerWorld worldIn = server.getWorld(dimensionId);
+        ServerWorld worldIn = server.getLevel(dimensionId);
         PlayerInteractionManager interactionManagerIn = new PlayerInteractionManager(worldIn);
-        PlayerProfileCache.setOnlineMode(false);
+        PlayerProfileCache.setUsesAuthentication(false);
         GameProfile gameprofile;
         try {
-            gameprofile = server.getPlayerProfileCache().getGameProfileForUsername(username);
+            gameprofile = server.getProfileCache().get(username);
         }
         finally {
-            PlayerProfileCache.setOnlineMode(server.isDedicatedServer() && server.isServerInOnlineMode());
+            PlayerProfileCache.setUsesAuthentication(server.isDedicatedServer() && server.usesAuthentication());
         }
         if (gameprofile == null)
         {
-            gameprofile = new GameProfile(PlayerEntity.getOfflineUUID(username), username);
+            gameprofile = new GameProfile(PlayerEntity.createPlayerUUID(username), username);
         }
         if (gameprofile.getProperties().containsKey("textures"))
         {
-            gameprofile = SkullTileEntity.updateGameProfile(gameprofile);
+            gameprofile = SkullTileEntity.updateGameprofile(gameprofile);
         }
         EntityPlayerMPFake instance = new EntityPlayerMPFake(server, worldIn, gameprofile, interactionManagerIn, false);
-        instance.fixStartingPosition = () -> instance.setPositionAndRotation(d0, d1, d2, (float) yaw, (float) pitch);
+        instance.fixStartingPosition = () -> instance.absMoveTo(d0, d1, d2, (float) yaw, (float) pitch);
         NetworkManagerFake networkManager = new NetworkManagerFake(PacketDirection.SERVERBOUND);
         try {
             networkManager.channelActive(new ChannelHandlerContext() {
@@ -541,42 +542,42 @@ public class EntityPlayerMPFake extends ServerPlayerEntity
         } catch (Exception e) {
             e.printStackTrace();
         }
-        server.getPlayerList().initializeConnectionToPlayer(networkManager, instance);
-        instance.teleport(worldIn, d0, d1, d2, (float)yaw, (float)pitch);
+        server.getPlayerList().placeNewPlayer(networkManager, instance);
+        instance.teleportTo(worldIn, d0, d1, d2, (float)yaw, (float)pitch);
         instance.setHealth(20.0F);
         instance.removed = false;
-        instance.stepHeight = 0.6F;
-        interactionManagerIn.setGameType(gamemode);
-        server.getPlayerList().func_232642_a_(new SEntityHeadLookPacket(instance, (byte) (instance.rotationYawHead * 256 / 360)), dimensionId);//instance.dimension);
-        server.getPlayerList().func_232642_a_(new SEntityTeleportPacket(instance), dimensionId);//instance.dimension);
-        instance.getServerWorld().getChunkProvider().updatePlayerPosition(instance);
-        instance.dataManager.set(PLAYER_MODEL_FLAG, (byte) 0x7f); // show all model layers (incl. capes)
-        instance.abilities.isFlying = flying;
+        instance.maxUpStep = 0.6F;
+        interactionManagerIn.setGameModeForPlayer(gamemode);
+        server.getPlayerList().broadcastAll(new SEntityHeadLookPacket(instance, (byte) (instance.yHeadRot * 256 / 360)), dimensionId);//instance.dimension);
+        server.getPlayerList().broadcastAll(new SEntityTeleportPacket(instance), dimensionId);//instance.dimension);
+        instance.getLevel().getChunkSource().move(instance);
+        instance.entityData.set(DATA_PLAYER_MODE_CUSTOMISATION, (byte) 0x7f); // show all model layers (incl. capes)
+        instance.abilities.flying = flying;
         return instance;
     }
 
     public static EntityPlayerMPFake createShadow(MinecraftServer server, ServerPlayerEntity player)
     {
-        player.getServer().getPlayerList().playerLoggedOut(player);
+        player.getServer().getPlayerList().remove(player);
         player.connection.disconnect(new TranslationTextComponent("multiplayer.disconnect.duplicate_login"));
-        ServerWorld worldIn = player.getServerWorld();//.getWorld(player.dimension);
+        ServerWorld worldIn = player.getLevel();//.getWorld(player.dimension);
         PlayerInteractionManager interactionManagerIn = new PlayerInteractionManager(worldIn);
         GameProfile gameprofile = player.getGameProfile();
         EntityPlayerMPFake playerShadow = new EntityPlayerMPFake(server, worldIn, gameprofile, interactionManagerIn, true);
-        server.getPlayerList().initializeConnectionToPlayer(new NetworkManagerFake(PacketDirection.SERVERBOUND), playerShadow);
+        server.getPlayerList().placeNewPlayer(new NetworkManagerFake(PacketDirection.SERVERBOUND), playerShadow);
 
         playerShadow.setHealth(player.getHealth());
-        playerShadow.connection.setPlayerLocation(player.getPosX(), player.getPosY(), player.getPosZ(), player.rotationYaw, player.rotationPitch);
-        interactionManagerIn.setGameType(player.interactionManager.getGameType());
+        playerShadow.connection.teleport(player.getX(), player.getY(), player.getZ(), player.yRot, player.xRot);
+        interactionManagerIn.setGameModeForPlayer(player.gameMode.getGameModeForPlayer());
         ((ServerPlayerEntityInterface) playerShadow).getActionPack().copyFrom(((ServerPlayerEntityInterface) player).getActionPack());
-        playerShadow.stepHeight = 0.6F;
-        playerShadow.dataManager.set(PLAYER_MODEL_FLAG, player.getDataManager().get(PLAYER_MODEL_FLAG));
+        playerShadow.maxUpStep = 0.6F;
+        playerShadow.entityData.set(DATA_PLAYER_MODE_CUSTOMISATION, player.getEntityData().get(DATA_PLAYER_MODE_CUSTOMISATION));
 
 
-        server.getPlayerList().func_232642_a_(new SEntityHeadLookPacket(playerShadow, (byte) (player.rotationYawHead * 256 / 360)), playerShadow.world.getDimensionKey());
-        server.getPlayerList().sendPacketToAllPlayers(new SPlayerListItemPacket(SPlayerListItemPacket.Action.ADD_PLAYER, playerShadow));
-        player.getServerWorld().getChunkProvider().updatePlayerPosition(playerShadow);
-        playerShadow.abilities.isFlying = player.abilities.isFlying;
+        server.getPlayerList().broadcastAll(new SEntityHeadLookPacket(playerShadow, (byte) (player.yHeadRot * 256 / 360)), playerShadow.level.dimension());
+        server.getPlayerList().broadcastAll(new SPlayerListItemPacket(SPlayerListItemPacket.Action.ADD_PLAYER, playerShadow));
+        player.getLevel().getChunkSource().move(playerShadow);
+        playerShadow.abilities.flying = player.abilities.flying;
         return playerShadow;
     }
 
@@ -589,11 +590,11 @@ public class EntityPlayerMPFake extends ServerPlayerEntity
     @Override
     protected void playEquipSound(ItemStack stack)
     {
-        if (!isHandActive()) super.playEquipSound(stack);
+        if (!isUsingItem()) super.playEquipSound(stack);
     }
 
     @Override
-    public void onKillCommand()
+    public void kill()
     {
         kill(new StringTextComponent("Killed"));
     }
@@ -601,44 +602,43 @@ public class EntityPlayerMPFake extends ServerPlayerEntity
     public void kill(ITextComponent reason)
     {
         shakeOff();
-        this.server.enqueue(new TickDelayedTask(this.server.getTickCounter(), () -> this.connection.onDisconnect(reason)));
+        this.server.tell(new TickDelayedTask(this.server.getTickCount(), () -> this.connection.onDisconnect(reason)));
     }
 
     @Override
     public void tick()
     {
-        if (this.getServer().getTickCounter() % 10 == 0)
+        if (this.getServer().getTickCount() % 10 == 0)
         {
-            this.connection.captureCurrentPosition();
-            this.getServerWorld().getChunkProvider().updatePlayerPosition(this);
+            this.connection.resetPosition();
+            this.getLevel().getChunkSource().move(this);
             //if (netherPortalCooldown==10) onTeleportationDone(); <- causes hard crash but would need to be done to enable portals
         }
         super.tick();
-        this.playerTick();
+        this.doTick();
     }
 
     private void shakeOff()
     {
-        if (getRidingEntity() instanceof PlayerEntity) stopRiding();
-        for (Entity passenger : getRecursivePassengers())
+        if (getVehicle() instanceof PlayerEntity) stopRiding();
+        for (Entity passenger : getIndirectPassengers())
         {
             if (passenger instanceof PlayerEntity) passenger.stopRiding();
         }
     }
 
     @Override
-    public void onDeath(DamageSource cause)
+    public void die(@Nonnull DamageSource cause)
     {
         shakeOff();
-        super.onDeath(cause);
+        super.die(cause);
         setHealth(20);
-        this.foodStats = new FoodStats();
+        this.foodData = new FoodStats();
         kill(this.getCombatTracker().getDeathMessage());
     }
 
     @Override
-    public String getPlayerIP()
-    {
+    public @Nonnull String getIpAddress() {
         return "127.0.0.1";
     }
 }

@@ -99,14 +99,14 @@ public class PlayerCommand {
                                 .then(literal("left").executes(c -> manipulate(c, ap -> ap.setStrafing(1))))
                                 .then(literal("right").executes(c -> manipulate(c, ap -> ap.setStrafing(-1))))
                         ).then(literal("spawn").executes(PlayerCommand::spawn)
-                                .then(literal("in").requires((player) -> player.hasPermissionLevel(2))
+                                .then(literal("in").requires((player) -> player.hasPermission(2))
                                         .then(argument("gamemode", StringArgumentType.word())
                                                 .suggests( (c, b) -> suggest(gamemodes, b))
                                                 .executes(PlayerCommand::spawn)))
                                 .then(literal("at").then(argument("position", Vec3Argument.vec3()).executes(PlayerCommand::spawn)
                                         .then(literal("facing").then(argument("direction", RotationArgument.rotation()).executes(PlayerCommand::spawn)
-                                                .then(literal("in").then(argument("dimension", DimensionArgument.getDimension()).executes(PlayerCommand::spawn)
-                                                        .then(literal("in").requires((player) -> player.hasPermissionLevel(2))
+                                                .then(literal("in").then(argument("dimension", DimensionArgument.dimension()).executes(PlayerCommand::spawn)
+                                                        .then(literal("in").requires((player) -> player.hasPermission(2))
                                                                 .then(argument("gamemode", StringArgumentType.word()).suggests( (c, b) -> suggest(gamemodes, b))
                                                                         .executes(PlayerCommand::spawn)
                                                                 )))
@@ -143,7 +143,7 @@ public class PlayerCommand {
     private static Collection<String> getPlayers(CommandSource source)
     {
         Set<String> players = Sets.newLinkedHashSet(Arrays.asList("Steve", "Alex"));
-        players.addAll(source.getPlayerNames());
+        players.addAll(source.getOnlinePlayerNames());
         return players;
     }
 
@@ -151,7 +151,7 @@ public class PlayerCommand {
     {
         String playerName = StringArgumentType.getString(context, "player");
         MinecraftServer server = context.getSource().getServer();
-        return server.getPlayerList().getPlayerByUsername(playerName);
+        return server.getPlayerList().getPlayerByName(playerName);
     }
 
     private static boolean cantManipulate(CommandContext<CommandSource> context)
@@ -159,24 +159,24 @@ public class PlayerCommand {
         PlayerEntity player = getPlayer(context);
         if (player == null)
         {
-            sendFeedback(context.getSource(), new StringTextComponent("Can only manipulate existing players").mergeStyle(TextFormatting.RED));
+            sendFeedback(context.getSource(), new StringTextComponent("Can only manipulate existing players").withStyle(TextFormatting.RED));
             return true;
         }
         PlayerEntity sendingPlayer;
         try
         {
-            sendingPlayer = context.getSource().asPlayer();
+            sendingPlayer = context.getSource().getPlayerOrException();
         }
         catch (CommandSyntaxException e)
         {
             return false;
         }
 
-        if (!context.getSource().getServer().getPlayerList().canSendCommands(sendingPlayer.getGameProfile()))
+        if (!context.getSource().getServer().getPlayerList().isOp(sendingPlayer.getGameProfile()))
         {
             if (sendingPlayer != player && !(player instanceof EntityPlayerMPFake))
             {
-                sendFeedback(context.getSource(), new StringTextComponent("Non OP players can't control other real players").mergeStyle(TextFormatting.RED));
+                sendFeedback(context.getSource(), new StringTextComponent("Non OP players can't control other real players").withStyle(TextFormatting.RED));
                 return true;
             }
         }
@@ -188,7 +188,7 @@ public class PlayerCommand {
         if (cantManipulate(context)) return true;
         PlayerEntity player = getPlayer(context);
         if (player instanceof EntityPlayerMPFake) return false;
-        sendFeedback(context.getSource(), new StringTextComponent("Only fake players can be moved or killed").mergeStyle(TextFormatting.RED));
+        sendFeedback(context.getSource(), new StringTextComponent("Only fake players can be moved or killed").withStyle(TextFormatting.RED));
         return true;
     }
 
@@ -197,31 +197,31 @@ public class PlayerCommand {
         String playerName = StringArgumentType.getString(context, "player");
         MinecraftServer server = context.getSource().getServer();
         PlayerList manager = server.getPlayerList();
-        PlayerEntity player = manager.getPlayerByUsername(playerName);
+        PlayerEntity player = manager.getPlayerByName(playerName);
         if (player != null)
         {
-            sendFeedback(context.getSource(), new StringTextComponent("Player ").mergeStyle(TextFormatting.RED)
-                    .appendSibling(new StringTextComponent(playerName).mergeStyle(TextFormatting.RED))
-                    .appendSibling(new StringTextComponent(" is already logged on").mergeStyle(TextFormatting.RED).mergeStyle(TextFormatting.BOLD))
+            sendFeedback(context.getSource(), new StringTextComponent("Player ").withStyle(TextFormatting.RED)
+                    .append(new StringTextComponent(playerName).withStyle(TextFormatting.RED))
+                    .append(new StringTextComponent(" is already logged on").withStyle(TextFormatting.RED).withStyle(TextFormatting.BOLD))
             );
             return true;
         }
-        GameProfile profile = server.getPlayerProfileCache().getGameProfileForUsername(playerName);
+        GameProfile profile = server.getProfileCache().get(playerName);
         if (profile == null)
         {
-            profile = new GameProfile(PlayerEntity.getOfflineUUID(playerName), playerName);
+            profile = new GameProfile(PlayerEntity.createPlayerUUID(playerName), playerName);
         }
-        if (manager.getBannedPlayers().isBanned(profile))
+        if (manager.getBans().isBanned(profile))
         {
-            sendFeedback(context.getSource(), new StringTextComponent("Player ").mergeStyle(TextFormatting.RED)
-                            .appendSibling(new StringTextComponent(playerName).mergeStyle(TextFormatting.RED))
-                            .appendSibling(new StringTextComponent(" is banned on this server").mergeStyle(TextFormatting.RED).mergeStyle(TextFormatting.BOLD))
+            sendFeedback(context.getSource(), new StringTextComponent("Player ").withStyle(TextFormatting.RED)
+                            .append(new StringTextComponent(playerName).withStyle(TextFormatting.RED))
+                            .append(new StringTextComponent(" is banned on this server").withStyle(TextFormatting.RED).withStyle(TextFormatting.BOLD))
             );
             return true;
         }
-        if (manager.isWhiteListEnabled() && manager.canJoin(profile) && !context.getSource().hasPermissionLevel(2))
+        if (manager.isUsingWhitelist() && manager.isWhiteListed(profile) && !context.getSource().hasPermission(2))
         {
-            sendFeedback(context.getSource(), new StringTextComponent("Whitelisted players can only be spawned by operators").mergeStyle(TextFormatting.RED));
+            sendFeedback(context.getSource(), new StringTextComponent("Whitelisted players can only be spawned by operators").withStyle(TextFormatting.RED));
             return true;
         }
         return false;
@@ -230,7 +230,7 @@ public class PlayerCommand {
     private static int kill(CommandContext<CommandSource> context)
     {
         if (cantReMove(context)) return 0;
-        getPlayer(context).onKillCommand();
+        getPlayer(context).kill();
         return 1;
     }
 
@@ -265,24 +265,24 @@ public class PlayerCommand {
     {
         if (cantSpawn(context)) return 0;
         CommandSource source = context.getSource();
-        Vector3d pos = tryGetArg(() -> Vec3Argument.getVec3(context, "position"), source::getPos);
+        Vector3d pos = tryGetArg(() -> Vec3Argument.getVec3(context, "position"), source::getPosition);
         Vector2f facing = tryGetArg(() -> RotationArgument.getRotation(context, "direction").getRotation(context.getSource()), source::getRotation);
-        RegistryKey<World> dimType = tryGetArg(() -> DimensionArgument.getDimensionArgument(context, "dimension").getDimensionKey(), () -> source.getWorld().getDimensionKey());
+        RegistryKey<World> dimType = tryGetArg(() -> DimensionArgument.getDimension(context, "dimension").dimension(), () -> source.getLevel().dimension());
         GameType mode = GameType.CREATIVE;
         boolean flying = false;
         try
         {
-            ServerPlayerEntity player = context.getSource().asPlayer();
-            mode = player.interactionManager.getGameType();
-            flying = player.abilities.isFlying;
+            ServerPlayerEntity player = context.getSource().getPlayerOrException();
+            mode = player.gameMode.getGameModeForPlayer();
+            flying = player.abilities.flying;
         }
         catch (CommandSyntaxException ignored) {}
         try {
             String opGameMode = StringArgumentType.getString(context, "gamemode");
-            mode = GameType.parseGameTypeWithDefault(opGameMode, null);
+            mode = GameType.byName(opGameMode, null);
             if(mode == null)
             {
-                sendFeedback(context.getSource(), new StringTextComponent("Invalid game mode: "+opGameMode+".").mergeStyle(TextFormatting.RED).mergeStyle(TextFormatting.BOLD));
+                sendFeedback(context.getSource(), new StringTextComponent("Invalid game mode: "+opGameMode+".").withStyle(TextFormatting.RED).withStyle(TextFormatting.BOLD));
                 return 0;
             }
         } catch (IllegalArgumentException ignored) {}
@@ -294,21 +294,21 @@ public class PlayerCommand {
         String playerName = StringArgumentType.getString(context, "player");
         if (playerName.length()>maxPlayerLength(source.getServer()))
         {
-            sendFeedback(context.getSource(), new StringTextComponent("Player name: "+playerName+" is too long").mergeStyle(TextFormatting.RED).mergeStyle(TextFormatting.BOLD));
+            sendFeedback(context.getSource(), new StringTextComponent("Player name: "+playerName+" is too long").withStyle(TextFormatting.RED).withStyle(TextFormatting.BOLD));
             return 0;
         }
 
         MinecraftServer server = source.getServer();
-        if (!World.isValid(new BlockPos(pos.x, pos.y, pos.z)))
+        if (!World.isInWorldBounds(new BlockPos(pos.x, pos.y, pos.z)))
         {
-            sendFeedback(context.getSource(), new StringTextComponent("Player "+playerName+" cannot be placed outside of the world").mergeStyle(TextFormatting.RED).mergeStyle(TextFormatting.BOLD));
+            sendFeedback(context.getSource(), new StringTextComponent("Player "+playerName+" cannot be placed outside of the world").withStyle(TextFormatting.RED).withStyle(TextFormatting.BOLD));
             return 0;
         }
         PlayerEntity player = EntityPlayerMPFake.createFake(playerName, server, pos.x, pos.y, pos.z, facing.y, facing.x, dimType, mode, flying);
         if (player == null)
         {
             sendFeedback(context.getSource(), new StringTextComponent("Player " + StringArgumentType.getString(context, "player") + " doesn't exist " +
-                    "and cannot spawn in online mode. Turn the server offline to spawn non-existing players").mergeStyle(TextFormatting.RED).mergeStyle(TextFormatting.BOLD));
+                    "and cannot spawn in online mode. Turn the server offline to spawn non-existing players").withStyle(TextFormatting.RED).withStyle(TextFormatting.BOLD));
             return 0;
         }
         return 1;
@@ -316,7 +316,7 @@ public class PlayerCommand {
 
     private static int maxPlayerLength(MinecraftServer server)
     {
-        return server.getServerPort() >= 0 ? 16 : 40;
+        return server.getPort() >= 0 ? 16 : 40;
     }
 
     private static int stop(CommandContext<CommandSource> context)
@@ -350,13 +350,13 @@ public class PlayerCommand {
         ServerPlayerEntity player = getPlayer(context);
         if (player instanceof EntityPlayerMPFake)
         {
-            sendFeedback(context.getSource(), new StringTextComponent("Cannot shadow fake players").mergeStyle(TextFormatting.RED));
+            sendFeedback(context.getSource(), new StringTextComponent("Cannot shadow fake players").withStyle(TextFormatting.RED));
             return 0;
         }
         ServerPlayerEntity sendingPlayer = null;
         try
         {
-            sendingPlayer = context.getSource().asPlayer();
+            sendingPlayer = context.getSource().getPlayerOrException();
         }
         catch (CommandSyntaxException ignored) { }
 
@@ -366,7 +366,7 @@ public class PlayerCommand {
     }
 
     private static void sendFeedback(CommandSource source, ITextComponent message) {
-        source.sendFeedback(message, source.getServer().getWorld(World.OVERWORLD) != null);
+        source.sendSuccess(message, source.getServer().getLevel(World.OVERWORLD) != null);
     }
 
 }

@@ -18,7 +18,7 @@ public class Tracer {
         BlockRayTraceResult blockHit = rayTraceBlocks(source, partialTicks, reach, fluids);
         double maxSqDist = reach * reach;
         if (blockHit != null) {
-            maxSqDist = blockHit.getHitVec().squareDistanceTo(source.getEyePosition(partialTicks));
+            maxSqDist = blockHit.getLocation().distanceToSqr(source.getEyePosition(partialTicks));
         }
         EntityRayTraceResult entityHit = rayTraceEntities(source, partialTicks, reach, maxSqDist);
         return entityHit == null ? blockHit : entityHit;
@@ -27,30 +27,30 @@ public class Tracer {
     public static BlockRayTraceResult rayTraceBlocks(Entity source, float partialTicks, double reach, boolean fluids)
     {
         Vector3d pos = source.getEyePosition(partialTicks);
-        Vector3d rotation = source.getLook(partialTicks);
+        Vector3d rotation = source.getViewVector(partialTicks);
         Vector3d reachEnd = pos.add(rotation.x * reach, rotation.y * reach, rotation.z * reach);
-        return source.world.rayTraceBlocks(new RayTraceContext(pos, reachEnd, RayTraceContext.BlockMode.OUTLINE, fluids ?
+        return source.level.clip(new RayTraceContext(pos, reachEnd, RayTraceContext.BlockMode.OUTLINE, fluids ?
                 RayTraceContext.FluidMode.ANY : RayTraceContext.FluidMode.NONE, source));
     }
 
     public static EntityRayTraceResult rayTraceEntities(Entity source, float partialTicks, double reach, double maxSqDist)
     {
         Vector3d pos = source.getEyePosition(partialTicks);
-        Vector3d reachVec = source.getLook(partialTicks).scale(reach);
-        AxisAlignedBB box = source.getBoundingBox().expand(reachVec).grow(1);
+        Vector3d reachVec = source.getViewVector(partialTicks).scale(reach);
+        AxisAlignedBB box = source.getBoundingBox().expandTowards(reachVec).inflate(1);
         return rayTraceEntities(source, pos, pos.add(reachVec), box, e -> !e.isSpectator() && e.canBeCollidedWith(), maxSqDist);
     }
 
     public static EntityRayTraceResult rayTraceEntities(Entity source, Vector3d start, Vector3d end, AxisAlignedBB box, Predicate<Entity> predicate, double maxSqDistance)
     {
-        World world = source.world;
+        World world = source.level;
         double targetDistance = maxSqDistance;
         Entity target = null;
         Vector3d targetHitPos = null;
-        for (Entity current : world.getEntitiesInAABBexcluding(source, box, predicate))
+        for (Entity current : world.getEntities(source, box, predicate))
         {
-            AxisAlignedBB currentBox = current.getBoundingBox().grow(current.getCollisionBorderSize());
-            Optional<Vector3d> currentHit = currentBox.rayTrace(start, end);
+            AxisAlignedBB currentBox = current.getBoundingBox().inflate(current.getPickRadius());
+            Optional<Vector3d> currentHit = currentBox.clip(start, end);
             if (currentBox.contains(start))
             {
                 if (targetDistance >= 0)
@@ -63,10 +63,10 @@ public class Tracer {
             else if (currentHit.isPresent())
             {
                 Vector3d currentHitPos = currentHit.get();
-                double currentDistance = start.squareDistanceTo(currentHitPos);
+                double currentDistance = start.distanceToSqr(currentHitPos);
                 if (currentDistance < targetDistance || targetDistance == 0)
                 {
-                    if (current.getLowestRidingEntity() == source.getLowestRidingEntity())
+                    if (current.getRootVehicle() == source.getRootVehicle())
                     {
                         if (targetDistance == 0)
                         {

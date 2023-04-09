@@ -11,7 +11,7 @@ public class NetworkManagerFake extends NetworkManager
     }
 
     @Override
-    public void disableAutoRead()
+    public void setReadOnly()
     {
     }
 

@@ -16,7 +16,7 @@ public class NetHandlerPlayServerFake extends ServerPlayNetHandler
     }
 
     @Override
-    public void sendPacket(final IPacket<?> packet)
+    public void send(final IPacket<?> packet)
     {
     }
 

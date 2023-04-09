@@ -19,23 +19,23 @@ public abstract class ServerWorld_fakePlayersMixin
 
     @Shadow boolean tickingEntities;
 
-    @Shadow public abstract void removeEntity(Entity entityIn);
+    @Shadow @Deprecated public abstract void onEntityRemoved(Entity p_217484_1_);
 
-    @Shadow public abstract void updateAllPlayersSleepingFlag();
+    @Shadow public abstract void updateSleepingPlayerList();
 
     @SuppressWarnings("UnnecessaryReturnStatement")
-    @Inject(method = "removePlayer(Lnet/minecraft/entity/player/ServerPlayerEntity;)V", at = @At("HEAD"))
+    @Inject(method = "removePlayerImmediately", at = @At("HEAD"))
     private void removePlayer(ServerPlayerEntity player, CallbackInfo ci) {
         player.remove(false);
-        if ( !(tickingEntities && player instanceof EntityPlayerMPFake) ) this.removeEntity(player);
+        if ( !(tickingEntities && player instanceof EntityPlayerMPFake) ) this.onEntityRemoved(player);
         else {
-            this.getServer().enqueue(new TickDelayedTask(getServer().getTickCounter(), () ->
+            this.getServer().tell(new TickDelayedTask(getServer().getTickCount(), () ->
             {
-                this.removeEntity(player);
-                player.clearInvulnerableDimensionChange();
+                this.onEntityRemoved(player);
+                player.hasChangedDimension();
             }));
         }
-        this.updateAllPlayersSleepingFlag();
+        this.updateSleepingPlayerList();
         return;
     }
 

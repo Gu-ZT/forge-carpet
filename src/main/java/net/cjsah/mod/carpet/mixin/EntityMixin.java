@@ -14,13 +14,14 @@ import javax.annotation.Nullable;
 @Mixin(Entity.class)
 public abstract class EntityMixin
 {
-    @Shadow public World world;
 
     @Shadow @Nullable public abstract Entity getControllingPassenger();
 
-    @Inject(method = "canPassengerSteer", at = @At("HEAD"), cancellable = true)
+    @Shadow public World level;
+
+    @Inject(method = "isControlledByLocalInstance", at = @At("HEAD"), cancellable = true)
     private void isFakePlayer(CallbackInfoReturnable<Boolean> cir)
     {
-        if (getControllingPassenger() instanceof EntityPlayerMPFake) cir.setReturnValue(!world.isRemote);
+        if (getControllingPassenger() instanceof EntityPlayerMPFake) cir.setReturnValue(!level.isClientSide);
     }
 }

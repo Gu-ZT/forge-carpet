@@ -18,12 +18,12 @@ public abstract class ThrownEnderpearlEntity_fakePlayersMixin extends Projectile
         super(entityType_1, world_1);
     }
 
-    @Redirect(method =  "onImpact", at = @At(
+    @Redirect(method =  "onHit", at = @At(
             value = "INVOKE",
-            target = "Lnet/minecraft/network/NetworkManager;isChannelOpen()Z"
+            target = "Lnet/minecraft/network/NetworkManager;isConnected()Z"
     ))
     private boolean isConnectionGood(NetworkManager networkManager)
     {
-        return networkManager.isChannelOpen() || getShooter() instanceof EntityPlayerMPFake;
+        return networkManager.isConnected() || getOwner() instanceof EntityPlayerMPFake;
     }
 }

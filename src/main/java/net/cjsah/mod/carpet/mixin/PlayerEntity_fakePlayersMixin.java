@@ -14,15 +14,15 @@ public abstract class PlayerEntity_fakePlayersMixin
      * To make sure player attacks are able to knockback fake players
      */
     @Redirect(
-            method = "attackTargetEntityWithCurrentItem",
+            method = "attack",
             at = @At(
                     value = "FIELD",
-                    target = "Lnet/minecraft/entity/Entity;velocityChanged:Z",
+                    target = "Lnet/minecraft/entity/Entity;hurtMarked:Z",
                     ordinal = 0
             )
     )
     private boolean velocityModifiedAndNotCarpetFakePlayer(Entity target)
     {
-        return target.velocityChanged && !(target instanceof EntityPlayerMPFake);
+        return target.hurtMarked && !(target instanceof EntityPlayerMPFake);
     }
 }
